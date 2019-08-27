@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Big Boi Boat Simulator.js</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #overlay {
+      position: absolute;
+      z-index: 1;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.4;
+      background-color: #000000;
+      color: #ffffff;
+    }
+
+    #overlay>div {
+      text-align: center;
+    }
+
+    #overlay>div>button {
+      height: 20px;
+      width: 100px;
+      background: transparent;
+      color: #ffffff;
+      outline: 1px solid #ffffff;
+      border: 0px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="overlay">
+    <div>
+      <button id="startButton">Click to Play</button>
+    </div>
+  </div>
+  <audio loop id="ambienceWater" preload="auto" style="display: none">
+    <source src="sounds/ambience.mp3" type="audio/mpeg" />
+  </audio>
+
+  <script src="js/three.js"></script>
+  <script src="js/OrbitControls.js"></script>
+  <script src="js/Water.js"></script>
+  <script src="js/Sky.js"></script>
+  <script src="js/dat.gui.min.js"></script>
+  <script src="js/GLTFLoader.js"></script>
+  <script src="js/GPUComputationRenderer.js"></script>
+  <script src="js/SimplexNoise.js"></script>
+  <script src="js/Lensflare.js"></script>
+
+  <script>
+    var startButton = document.getElementById('startButton');
+    startButton.addEventListener('click', init);
+
+    function init() {
+
+      var overlay = document.getElementById('overlay');
+      overlay.remove();
+    }
+    //Scene Setup
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    var renderer = new THREE.WebGLRenderer({
+      antialias: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor("#DDDDDD");
+    document.body.appendChild(renderer.domElement);
+    window.addEventListener("resize", () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+    });
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.target.set(0, 10, 0);
+    controls.minDistance = 40.0;
+    controls.maxDistance = 180.0;
+    controls.update();
+    //
+    //Light
+    scene.add(new THREE.AmbientLight(0x666666));
+    var light = new THREE.DirectionalLight(0xdfebff, 2.5);
+    light.position.set(-800, 400, 900);
+    light.position.multiplyScalar(1.3);
+    light.castShadow = true;
+    scene.add(light);
+    var textureLoader = new THREE.TextureLoader();
+
+    var textureFlare0 = textureLoader.load("textures/lensflare/lensflare0.png");
+    var textureFlare1 = textureLoader.load("textures/lensflare/lensflare2.png");
+    var textureFlare2 = textureLoader.load("textures/lensflare/lensflare3.png");
+
+    var lensflare = new THREE.Lensflare();
+
+    lensflare.addElement(new THREE.LensflareElement(textureFlare0, 512, 0));
+    lensflare.addElement(new THREE.LensflareElement(textureFlare1, 512, 0));
+    lensflare.addElement(new THREE.LensflareElement(textureFlare2, 60, 0.6));
+
+    light.add(lensflare);
+
+    var light = new THREE.HemisphereLight(0xffffbb, 0x080820, 1);
+    scene.add(light);
+    //
+    //Water
+    var waterGeometry = new THREE.PlaneBufferGeometry(10000, 10000);
+    var water = new THREE.Water(waterGeometry, {
+      textureWidth: 1024,
+      textureHeight: 1024,
+      waterNormals: new THREE.TextureLoader().load(
+        "textures/waternormals.jpg",
+        function (texture) {
+          texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        }
+      ),
+      alpha: 1.0,
+      sunDirection: light.position.clone().normalize(),
+      sunColor: 0xffffff,
+      waterColor: 0x001e0f,
+      distortionScale: 3.7
+    });
+    water.rotation.x = -Math.PI / 2;
+    scene.add(water);
+    //
+    //Audio
+    var listener = new THREE.AudioListener();
+    camera.add(listener);
+    var sound = new THREE.Audio(listener);
+    var audioElement = document.getElementById("ambienceWater");
+    audioElement.play();
+
+    var audio = new THREE.Audio(listener);
+    audio.setMediaElementSource(audioElement);
+    var positionalAudio = new THREE.PositionalAudio(listener);
+    positionalAudio.setDirectionalCone(180, 230, 0.1);
+
+    var helper = new THREE.PositionalAudioHelper(positionalAudio);
+    positionalAudio.add(helper);
+    //
+    //Model
+    var loader = new THREE.GLTFLoader();
+
+    loader.load('models/scene.gltf', function (gltf) {
+
+      scene.add(gltf.scene);
+
+    }, undefined, function (error) {
+
+      console.error(error);
+
+    });
+
+    //
+    //Sky
+    {
+      const loader = new THREE.CubeTextureLoader();
+      const texture = loader.load([
+        "textures/skybox/px.jpg",
+        "textures/skybox/nx.jpg",
+        "textures/skybox/py.jpg",
+        "textures/skybox/ny.jpg",
+        "textures/skybox/pz.jpg",
+        "textures/skybox/nz.jpg"
+      ]);
+      scene.background = texture;
+    }
+    //
+
+    camera.position.z = 2;
+    camera.position.y = 20;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      water.material.uniforms["time"].value += 1.0 / 240.0;
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+
+</html>
